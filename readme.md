@@ -38,3 +38,7 @@ writing [bpf c](github.com/iovisor/bcc) is hard, so combine existing tools that 
 - [profile](github.com/iovisor/bcc/blob/master/tools/profile.py): sample on-cpu stack traces at a regular interval
 - [funclatency](github.com/iovisor/bcc/blob/master/tools/funclatency.py): histogram duration of calls of a function
 - [funcslower](github.com/iovisor/bcc/blob/master/tools/funcslower.py): trace calls of a function that are slower than x ms
+
+## dependencies
+
+- [bcc](github.com/iovisor/bcc/blob/master/INSTALL.md)
