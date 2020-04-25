@@ -3,12 +3,20 @@
 import bcc
 from sys import stderr
 from time import sleep
+from string import Template
 import signal
 import os
 import errno
 
 def preprocess(pid = None, tid = None, stack_storage_size = 16384, include_idle = False):
-    bpf_text = """
+    idle_filter = "false" if include_idle else "pid == 0"
+    thread_filter = \
+        f"tgid != {pid}" if pid is not None else \
+        f"pid != {tid}" if tid is not None else \
+        "false"
+    user_stacks_id = "-1" if user_stacks_only else "stack_traces.get_stackid(&ctx->regs, 0)"
+    kernel_stacks_id = "-1" if kernel_stacks_only else "stack_traces.get_stackid(&ctx->regs, BPF_F_USER_STACK)"
+    bpf_text = Template("""
     #include <uapi/linux/ptrace.h>
     #include <uapi/linux/bpf_perf_event.h>
     #include <linux/sched.h>
@@ -22,32 +30,26 @@ def preprocess(pid = None, tid = None, stack_storage_size = 16384, include_idle 
         char name[TASK_COMM_LEN];
     };
     BPF_HASH(counts, struct key_t);
-    BPF_STACK_TRACE(stack_traces, """ + str(stack_storage_size) + """);
+    BPF_STACK_TRACE(stack_traces, $stack_storage_size);
 
     int do_perf_event(struct bpf_perf_event_data *ctx) {
         u64 id = bpf_get_current_pid_tgid();
         u32 tgid = id >> 32;
         u32 pid = id;
 
-        if (""" + ("false" if include_idle else "pid == 0") + """)
+        if ($idle_filter)
             return 0;
 
-        if (""" + (\
-            "tgid != " + str(pid) if pid is not None else \
-            "pid != " + str(tid) if tid is not None else \
-            "false") + """)
+        if ($thread_filter)
             return 0;
-
 
         // create map key
         struct key_t key = {.pid = tgid};
         bpf_get_current_comm(&key.name, sizeof(key.name));
 
         // get stacks
-        key.user_stack_id = """ + \
-            ("-1" if user_stacks_only else "stack_traces.get_stackid(&ctx->regs, 0)") + """;
-        key.kernel_stack_id = """ + \
-            ("-1" if kernel_stacks_only else "stack_traces.get_stackid(&ctx->regs, BPF_F_USER_STACK)") + """;
+        key.user_stack_id = $user_stacks_id;
+        key.kernel_stack_id = $kernel_stacks_id;
 
         if (key.kernel_stack_id >= 0) {
             // populate extras to fix the kernel stack
@@ -78,7 +80,7 @@ def preprocess(pid = None, tid = None, stack_storage_size = 16384, include_idle 
 
         counts.increment(key);
         return 0;
-    }"""
+    }""").substitute(**locals())
     return bpf_text
 
 def compile(bpf_text):

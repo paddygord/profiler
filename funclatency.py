@@ -2,11 +2,29 @@
 
 from bcc import BPF
 from time import sleep, strftime
+from string import Template
 import signal
 import functools
 
 def preprocess(function, library, pid, milliseconds = False, microseconds = True):
-    bpf_text = """
+    filter = f'tgid != {pid}' if pid is not None else ''
+    factor = '1000000' if milliseconds else '1000' if microseconds else '1'
+    label = 'msecs' if milliseconds else 'usecs' if microseconds else 'nsecs'
+    storage = """BPF_HASH(ipaddr, u32);
+    BPF_HISTOGRAM(dist, hist_key_t);""" if need_key else 'BPF_HISTOGRAM(dist);'
+    entrystore = """u64 ip = PT_REGS_IP(ctx);
+    ipaddr.update(&pid, &ip);""" if need_key else ''
+    store = f"""u64 ip, *ipp = ipaddr.lookup(&pid);
+    if (ipp) {
+        ip = *ipp;
+        hist_key_t key;
+        key.key.ip = ip;
+        key.key.pid = {'-1' if not library else 'tgid'};
+        key.slot = bpf_log2l(delta);
+        dist.increment(key);
+        ipaddr.delete(&pid);
+    }""" if need_key else 'dist.increment(bpf_log2l(delta));'
+    bpf_text = Template("""
     #include <uapi/linux/ptrace.h>
 
     typedef struct ip_pid {
@@ -20,7 +38,7 @@ def preprocess(function, library, pid, milliseconds = False, microseconds = True
     } hist_key_t;
 
     BPF_HASH(start, u32);
-    STORAGE
+    $storage
 
     int trace_func_entry(struct pt_regs *ctx) {
         u64 pid_tgid = bpf_get_current_pid_tgid();
@@ -28,8 +46,9 @@ def preprocess(function, library, pid, milliseconds = False, microseconds = True
         u32 tgid = pid_tgid >> 32;
         u64 ts = bpf_ktime_get_ns();
 
-        FILTER
-        ENTRYSTORE
+        if ($filter)
+            return 0;
+        $entrystore
         start.update(&pid, &ts);
 
         return 0;
@@ -48,55 +67,14 @@ def preprocess(function, library, pid, milliseconds = False, microseconds = True
         }
         delta = bpf_ktime_get_ns() - *tsp;
         start.delete(&pid);
-        FACTOR
+        delta /= $factor;
 
         // store as histogram
-        STORE
+        $store
 
         return 0;
     }
-    """
-
-    # code substitutions
-    if pid:
-        bpf_text = bpf_text.replace('FILTER',
-            'if (tgid != %d) { return 0; }' % pid)
-    else:
-        bpf_text = bpf_text.replace('FILTER', '')
-    if milliseconds:
-        bpf_text = bpf_text.replace('FACTOR', 'delta /= 1000000;')
-        label = "msecs"
-    elif microseconds:
-        bpf_text = bpf_text.replace('FACTOR', 'delta /= 1000;')
-        label = "usecs"
-    else:
-        bpf_text = bpf_text.replace('FACTOR', '')
-        label = "nsecs"
-    if need_key:
-        bpf_text = bpf_text.replace('STORAGE', 'BPF_HASH(ipaddr, u32);\n' +
-            'BPF_HISTOGRAM(dist, hist_key_t);')
-        # stash the IP on entry, as on return it's kretprobe_trampoline:
-        bpf_text = bpf_text.replace('ENTRYSTORE',
-            'u64 ip = PT_REGS_IP(ctx); ipaddr.update(&pid, &ip);')
-        pid = '-1' if not library else 'tgid'
-        bpf_text = bpf_text.replace('STORE',
-            """
-        u64 ip, *ipp = ipaddr.lookup(&pid);
-        if (ipp) {
-            ip = *ipp;
-            hist_key_t key;
-            key.key.ip = ip;
-            key.key.pid = %s;
-            key.slot = bpf_log2l(delta);
-            dist.increment(key);
-            ipaddr.delete(&pid);
-        }
-            """ % pid)
-    else:
-        bpf_text = bpf_text.replace('STORAGE', 'BPF_HISTOGRAM(dist);')
-        bpf_text = bpf_text.replace('ENTRYSTORE', '')
-        bpf_text = bpf_text.replace('STORE',
-            'dist.increment(bpf_log2l(delta));')
+    """).substitute(**locals())
     return label, bpf_text
 
 def compile(bpf_text):
