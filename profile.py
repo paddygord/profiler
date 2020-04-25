@@ -184,6 +184,7 @@ def report(b, folded = False, need_delimiter = False, annotations = False):
 if __name__ == "__main__":
     user_stacks_only = False
     kernel_stacks_only = False
+
     bpf_text = preprocess()
     b = compile(bpf_text)
     attach(b)

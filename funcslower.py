@@ -4,8 +4,9 @@ import bcc
 from string import Template
 import time
 
-def preprocess(functions, arguments, tgid, duration_ns = 10):
-    bpf_text = \
+def preprocess(functions, arguments, tgid, duration_ns = 10000):
+    thread_filter = f"tgid != {tgid}" if tgid is not None else "false"
+    bpf_text = Template(\
     ("#define GRAB_ARGS\n" if arguments is not None else "") + \
     ("#define USER_STACKS\n" if get_user_stack is not None else "") + \
     ("#define KERNEL_STACKS\n" if get_kernel_stack is not None else "") + \
@@ -50,9 +51,7 @@ def preprocess(functions, arguments, tgid, duration_ns = 10):
     static int trace_entry(struct pt_regs *ctx, int id) {
         u64 tgid_pid = bpf_get_current_pid_tgid();
         u32 tgid = tgid_pid >> 32;
-        if (""" + (\
-            "tgid != " + str(tgid) if tgid is not None else "false"\
-        ) + """)
+        if ($thread_filter)
             return 0;
 
         u32 pid = tgid_pid;
@@ -86,7 +85,7 @@ def preprocess(functions, arguments, tgid, duration_ns = 10):
         u64 delta_ns = bpf_ktime_get_ns() - entryp->start_ns;
         entryinfo.delete(&tgid_pid);
 
-        if (delta_ns < """ + str(duration_ns) + """)
+        if (delta_ns < $duration_ns)
             return 0;
 
         struct data_t data = {};
@@ -138,14 +137,14 @@ def preprocess(functions, arguments, tgid, duration_ns = 10):
 
         return 0;
     }
-    """
+    """).substitute(**locals())
 
     for i in range(len(functions)):
-        bpf_text += """
-    int trace_%d(struct pt_regs *ctx) {
-        return trace_entry(ctx, %d);
-    }
-    """ % (i, i)
+        bpf_text += Template("""
+    int trace_$i(struct pt_regs *ctx) {{
+        return trace_entry(ctx, $i);
+    }}
+    """).substitute(**locals())
     return bpf_text
 
 def compile(bpf_text):
@@ -194,9 +193,9 @@ def wait_and_report():
         return str.join(" ", ["0x%x" % arg for arg in event.args[:arguments]])
 
     def print_stack(event):
-        user_stack = []
         stack_traces = b.get_table("stacks")
 
+        user_stack = []
         if get_user_stack and event.user_stack_id > 0:
             user_stack = stack_traces.walk(event.user_stack_id)
 
@@ -251,7 +250,7 @@ if __name__ == "__main__":
     get_kernel_stack = True
     functions = ["c:open"]
     arguments = 3
-    tgid = 0
+    tgid = None
 
     bpf_text = preprocess(functions, arguments, tgid)
     b = compile(bpf_text)
