@@ -42,3 +42,16 @@ writing [bpf c](github.com/iovisor/bcc) is hard, so combine existing tools that 
 ## dependencies
 
 - [bcc](github.com/iovisor/bcc/blob/master/INSTALL.md)
+
+## progress
+
+- [ ] modularise profile.py, funclatency.py, and funcslower.py from bcc-tools
+- [ ] combine them into one script that does multiple
+- [ ] add state that is reused between them
+- [ ] separate samples based on some high level decision
+- [ ] for any step taking longer than the 95th percentile, show me a flamegraph of all samples inside those steps
+
+## future
+
+- Maybe use [plotly dash](https://dash.plotly.com/interactive-graphing) for a graphical frontend
+- Maybe use [kernel density estimation](https://scikit-learn.org/stable/modules/density.html#kernel-density-estimation) rather than histograms for visualisation and/or automatic discovery
