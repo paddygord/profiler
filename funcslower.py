@@ -175,14 +175,15 @@ def wait_and_report():
             ("COMM", "PID", "LAT(%s)" % time_designator, "RVAL",
             "FUNC" + (" ARGS" if arguments else "")))
 
-    earliest_ts = 0
+    global earliest_ts
+    earliest_ts = None
 
     def time_str(event):
         if time_abs:
             return "%-10s " % time.strftime("%H:%M:%S")
         if time_rel:
             global earliest_ts
-            if earliest_ts == 0:
+            if earliest_ts is None:
                 earliest_ts = event.start_ns
             return "%-10.6f " % ((event.start_ns - earliest_ts) / 1000000000.0)
         return ""
@@ -210,27 +211,25 @@ def wait_and_report():
         do_delimiter = user_stack and kernel_stack
 
         if folded:
-            # print folded stack output
             user_stack = list(user_stack)
             kernel_stack = list(kernel_stack)
-            line = [event.comm.decode('utf-8', 'replace')] + \
-                [b.sym(addr, event.tgid_pid) for addr in reversed(user_stack)] + \
-                (do_delimiter and ["-"] or []) + \
-                [b.ksym(addr) for addr in reversed(kernel_stack)]
-            print("%s %d" % (";".join(line), 1))
+            line = [event.comm.decode(errors='replace')] + \
+                [b.sym(addr, event.tgid_pid).decode(errors='replace') for addr in reversed(user_stack)] + \
+                (["-"] if do_delimiter else []) + \
+                [b.ksym(addr).decode(errors='replace') for addr in reversed(kernel_stack)]
+            print("{} 1".format(";".join(line)))
         else:
-            # print default multi-line stack output.
             for addr in kernel_stack:
-                print("    %s" % b.ksym(addr))
+                print("    {}".format(b.ksym(addr).decode(errors='replace')))
             for addr in user_stack:
-                print("    %s" % b.sym(addr, event.tgid_pid))
+                print("    {}".format(b.sym(addr, event.tgid_pid).decode(errors='replace')))
 
     def print_event(cpu, data, size):
         event = b["events"].event(data)
         ts = float(event.duration_ns) / time_multiplier
         if not folded:
             print((time_str(event) + "%-14.14s %-6s %7.2f %16x %s %s") %
-                (event.comm.decode('utf-8', 'replace'), event.tgid_pid >> 32,
+                (event.comm.decode(errors='replace'), event.tgid_pid >> 32,
                  ts, event.retval, functions[event.id], args_str(event)))
         if get_user_stack or get_kernel_stack:
             print_stack(event)
