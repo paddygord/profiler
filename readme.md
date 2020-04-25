@@ -41,7 +41,7 @@ writing [bpf c](github.com/iovisor/bcc) is hard, so combine existing tools that 
 
 ## dependencies
 
-- [bcc](github.com/iovisor/bcc/blob/master/INSTALL.md)
+- [bcc](https://github.com/iovisor/bcc/blob/master/INSTALL.md)
 
 ## progress
 
