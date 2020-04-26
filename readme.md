@@ -30,6 +30,7 @@
 - e.g. separate stacks based on whether a function higher up the stacktraces duration was in the 95th percentile
 - because every step (sampling, tracing, output) is dynamic (enabled by bpf), you never need to recompile or restart the target application or profiling application
 - this enables interactive profiling, digging into the problem, e.g. (highest level) sample everything -> sample where high level function in 95th percentile -> sample only when this branch is taken -> (lowest level) trace `recv` calls at `main.cc:1312`
+- it would even allow tracing an if-statement, other branch, or an arbitrary line of code, rather than just function entry/exit. this would be enabled by [dwarf debug info integration](#future)
 - rather than fixed time windows (e.g. run for 10 seconds then stop and report), reporting can be streaming (present data from last 10 seconds or an exponentially weighted moving average of all time)
 
 ## approach
