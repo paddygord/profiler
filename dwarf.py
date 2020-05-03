@@ -93,6 +93,16 @@ def process_dwarf(dwarf, filename, line):
     rel_address = address - subprogram_address
     return name, address, rel_address
 
+def get_variable_location(dwarf, variable):
+    for cu in dwarf.iter_CUs():
+        for die in cu.iter_DIEs():
+            if die.tag == 'DW_TAG_variable':
+                if 'DW_AT_name' in die.attributes:
+                    var = die.attributes['DW_AT_name'].value
+                    if var == b'tick':
+                        offset = die.attributes['DW_AT_location'].value
+                        return offset
+
 if __name__ == '__main__':
     if len(sys.argv) < 3:
         print("error too few arguments")
@@ -102,10 +112,15 @@ if __name__ == '__main__':
     if ':' not in location:
         print("error location specifier must be 'file:line'")
         sys.exit(1)
+
     filename = location.split(':')[0].encode()
     line = int(location.split(':')[1])
 
     dwarf = load_dwarf(bin_filename)
+
+    variable_location = get_variable_location(dwarf, 'tick')
+
+    print('variable location', variable_location)
 
     name, address, rel_address = process_dwarf(dwarf, filename, line)
 
