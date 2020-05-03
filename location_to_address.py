@@ -38,15 +38,20 @@ def location_to_abs_address(dwarf, filename, line):
                     return cu, addresses[0].address
             prevstate = entry.state
 
-def address_to_subprogram_address(dwarf, cu_suggest, address):
-    aranges = dwarf.get_aranges()
-    cu_ofs = aranges.cu_offset_at_addr(address)
-    cu = dwarf.get_CU_at(cu_ofs)
-    #print((cu, cu_suggest))
-    #XXX is there a bug in aranges.cu_offset_at_addr?
-    #it should return the same thing as the cu found by lineprog
+def cu_to_filename(cu):
+    return cu.get_top_DIE().attributes['DW_AT_name'].value
 
-    for die in cu_suggest.iter_DIEs():
+def address_to_subprogram_address(dwarf, address, cu_suggest=None):
+    cu = cu_suggest
+    if cu is None:
+        aranges = dwarf.get_aranges()
+        cu_ofs = aranges.cu_offset_at_addr(address)
+        cu = dwarf.get_CU_at(cu_ofs)
+    if cu is None:
+        print('not implemented yet')
+        sys.exit(1)
+
+    for die in cu.iter_DIEs():
         if die.tag == 'DW_TAG_subprogram':
             if 'DW_AT_ranges' in die.attributes:
                 range = die.attributes['DW_AT_ranges'].value
@@ -75,7 +80,8 @@ def address_to_subprogram_address(dwarf, cu_suggest, address):
 
 def location_to_rel_address(dwarf, filename, line):
     cu, address = location_to_abs_address(dwarf, filename, line)
-    subprogram_address = address_to_subprogram_address(dwarf, cu, address)
+    print('address', address)
+    subprogram_address = address_to_subprogram_address(dwarf, address, cu)
     return address - subprogram_address
 
 if __name__ == '__main__':
