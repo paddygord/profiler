@@ -4,7 +4,7 @@ sys.path.insert(1, './pyelftools')
 import elftools.elf.elffile
 import elftools.dwarf.descriptions
 
-def get_dwarf(filename):
+def load_dwarf(filename):
     with open(filename, 'rb') as f:
         elffile = elftools.elf.elffile.ELFFile(f)
 
@@ -38,10 +38,18 @@ def location_to_abs_address(dwarf, filename, line):
                     return cu, addresses[0].address
             prevstate = entry.state
 
+def die_to_pubname(dwarf, die):
+    pubnames = dwarf.get_pubnames()
+    entries = [n for (n, entry) in pubnames.items() if entry.die_ofs == die.offset]
+    if len(entries) > 1:
+        print('error multiple DIEs have the same offset')
+        sys.exit(1)
+    return entries[0]
+
 def cu_to_filename(cu):
     return cu.get_top_DIE().attributes['DW_AT_name'].value
 
-def address_to_subprogram_address(dwarf, address, cu_suggest=None):
+def address_to_subprogram_die(dwarf, address, cu_suggest=None):
     cu = cu_suggest
     if cu is None:
         aranges = dwarf.get_aranges()
@@ -70,7 +78,7 @@ def address_to_subprogram_address(dwarf, address, cu_suggest=None):
                     print('error: invalid DW_AT_high_pc class:', high_pc_attr_class)
                     continue
                 if low_pc <= address <= high_pc:
-                    return low_pc
+                    return die, low_pc
             elif 'DW_AT_low_pc' in die.attributes:
                 print('error subprogram with only DW_AT_low_pc is not handled yet')
                 sys.exit(1)
@@ -78,11 +86,12 @@ def address_to_subprogram_address(dwarf, address, cu_suggest=None):
                 pass
     return None
 
-def location_to_rel_address(dwarf, filename, line):
+def process_dwarf(dwarf, filename, line):
     cu, address = location_to_abs_address(dwarf, filename, line)
-    print('address', address)
-    subprogram_address = address_to_subprogram_address(dwarf, address, cu)
-    return address - subprogram_address
+    subprogram_die, subprogram_address = address_to_subprogram_die(dwarf, address, cu)
+    name = die_to_pubname(dwarf, subprogram_die)
+    rel_address = address - subprogram_address
+    return name, address, rel_address
 
 if __name__ == '__main__':
     if len(sys.argv) < 3:
@@ -96,6 +105,10 @@ if __name__ == '__main__':
     filename = location.split(':')[0].encode()
     line = int(location.split(':')[1])
 
-    dwarf = get_dwarf(bin_filename)
-    rel_address = location_to_rel_address(dwarf, filename, line)
-    print(rel_address)
+    dwarf = load_dwarf(bin_filename)
+
+    name, address, rel_address = process_dwarf(dwarf, filename, line)
+
+    print('name', name)
+    print('abs address', address)
+    print('rel address', rel_address)
