@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 import sys
+sys.path.insert(1, './pyelftools')
 import elftools.elf.elffile
 
 def process_file(filename, location):
