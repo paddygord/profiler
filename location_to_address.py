@@ -38,19 +38,6 @@ def location_to_abs_address(dwarf, filename, line):
                     return cu, addresses[0].address
             prevstate = entry.state
 
-def pubname_to_address(dwarf, name):
-    pubnames = dwarf.get_pubnames()
-    entries = [entry for (n, entry) in pubnames.items() if n.endswith(name)]
-    if len(entries) > 1:
-        print('error name specified matches multiple possible names')
-        sys.exit(1)
-    entry = entries[0]
-
-    cu = dwarf.get_CU_at(entry.cu_ofs)
-    die = dwarf.get_DIE_from_refaddr(entry.die_ofs, cu)
-    assert die.tag == 'DW_TAG_subprogram'
-    return die.attributes['DW_AT_low_pc'].value
-
 def address_to_subprogram_address(dwarf, cu_suggest, address):
     aranges = dwarf.get_aranges()
     cu_ofs = aranges.cu_offset_at_addr(address)
