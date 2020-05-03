@@ -18,6 +18,7 @@ def process_file(filename, location):
         return address
 
 def location_to_address(dwarfinfo, filename, line):
+    addresses = []
     for CU in dwarfinfo.iter_CUs():
         lineprog = dwarfinfo.line_program_for_CU(CU)
         prevstate = None
@@ -31,8 +32,14 @@ def location_to_address(dwarfinfo, filename, line):
             if entry.state.end_sequence:
                 prevstate = None
                 continue
-            if prevstate and prevstate.line <= line < entry.state.line:
-                return prevstate.address
+            if prevstate:
+                if prevstate.line <= line < entry.state.line:
+                    addresses.append((prevstate.address, prevstate.is_stmt))
+                if addresses and entry.state.line <= line:
+                    for (address, stmt) in addresses:
+                        if stmt:
+                            return address
+                    return addresses[0]
             prevstate = entry.state
 
 if __name__ == '__main__':
