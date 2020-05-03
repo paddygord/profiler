@@ -2,26 +2,21 @@
 import sys
 sys.path.insert(1, './pyelftools')
 import elftools.elf.elffile
+import elftools.dwarf.descriptions
 
-def process_file(filename, location):
+def get_dwarf(filename):
     with open(filename, 'rb') as f:
         elffile = elftools.elf.elffile.ELFFile(f)
 
         if not elffile.has_dwarf_info():
             print('file has no DWARF info')
             return
+        return elffile.get_dwarf_info()
 
-        if ':' not in location:
-            return None
-        filename = location.split(':')[0].encode()
-        line = int(location.split(':')[1])
-        address = location_to_address(elffile.get_dwarf_info(), filename, line)
-        return address
-
-def location_to_address(dwarfinfo, filename, line):
+def location_to_abs_address(dwarf, filename, line):
     addresses = []
-    for CU in dwarfinfo.iter_CUs():
-        lineprog = dwarfinfo.line_program_for_CU(CU)
+    for cu in dwarf.iter_CUs():
+        lineprog = dwarf.line_program_for_CU(cu)
         prevstate = None
         for entry in lineprog.get_entries():
             if entry.state is None:
@@ -35,17 +30,79 @@ def location_to_address(dwarfinfo, filename, line):
                 continue
             if prevstate:
                 if prevstate.line <= line < entry.state.line:
-                    addresses.append((prevstate.address, prevstate.is_stmt))
+                    addresses.append(prevstate)
                 if addresses and entry.state.line <= line:
-                    for (address, stmt) in addresses:
-                        if stmt:
-                            return address
-                    return addresses[0]
+                    for address in addresses:
+                        if address.is_stmt:
+                            return cu, address.address
+                    return cu, addresses[0].address
             prevstate = entry.state
+
+def pubname_to_address(dwarf, name):
+    pubnames = dwarf.get_pubnames()
+    entries = [entry for (n, entry) in pubnames.items() if n.endswith(name)]
+    if len(entries) > 1:
+        print('error name specified matches multiple possible names')
+        sys.exit(1)
+    entry = entries[0]
+
+    cu = dwarf.get_CU_at(entry.cu_ofs)
+    die = dwarf.get_DIE_from_refaddr(entry.die_ofs, cu)
+    assert die.tag == 'DW_TAG_subprogram'
+    return die.attributes['DW_AT_low_pc'].value
+
+def address_to_subprogram_address(dwarf, cu_suggest, address):
+    aranges = dwarf.get_aranges()
+    cu_ofs = aranges.cu_offset_at_addr(address)
+    cu = dwarf.get_CU_at(cu_ofs)
+    #print((cu, cu_suggest))
+    #XXX is there a bug in aranges.cu_offset_at_addr?
+    #it should return the same thing as the cu found by lineprog
+
+    for die in cu_suggest.iter_DIEs():
+        if die.tag == 'DW_TAG_subprogram':
+            if 'DW_AT_ranges' in die.attributes:
+                range = die.attributes['DW_AT_ranges'].value
+                ranges = dwarf.debug_ranges_sec.index(range)
+                print('error DW_AT_ranges is not handled yet')
+                sys.exit(1)
+            elif 'DW_AT_low_pc' in die.attributes and 'DW_AT_high_pc' in die.attributes:
+                low_pc = die.attributes['DW_AT_low_pc'].value
+                high_pc_attr = die.attributes['DW_AT_high_pc']
+                high_pc_attr_class = elftools.dwarf.descriptions.describe_form_class(high_pc_attr.form)
+                if high_pc_attr_class == 'address':
+                    high_pc = high_pc_attr.value
+                elif high_pc_attr_class == 'constant':
+                    high_pc = low_pc + high_pc_attr.value
+                else:
+                    print('error: invalid DW_AT_high_pc class:', high_pc_attr_class)
+                    continue
+                if low_pc <= address <= high_pc:
+                    return low_pc
+            elif 'DW_AT_low_pc' in die.attributes:
+                print('error subprogram with only DW_AT_low_pc is not handled yet')
+                sys.exit(1)
+            else:
+                pass
+    return None
+
+def location_to_rel_address(dwarf, filename, line):
+    cu, address = location_to_abs_address(dwarf, filename, line)
+    subprogram_address = address_to_subprogram_address(dwarf, cu, address)
+    return address - subprogram_address
 
 if __name__ == '__main__':
     if len(sys.argv) < 3:
         print("error too few arguments")
         sys.exit(1)
-    address = process_file(sys.argv[1], sys.argv[2])
-    print('address', hex(address))
+    bin_filename = sys.argv[1]
+    location = sys.argv[2]
+    if ':' not in location:
+        print("error location specifier must be 'file:line'")
+        sys.exit(1)
+    filename = location.split(':')[0].encode()
+    line = int(location.split(':')[1])
+
+    dwarf = get_dwarf(bin_filename)
+    rel_address = location_to_rel_address(dwarf, filename, line)
+    print(rel_address)
