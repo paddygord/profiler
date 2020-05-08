@@ -47,7 +47,7 @@ writing [bpf c](github.com/iovisor/bcc) is hard, so combine existing tools that 
 ## progress
 
 - [x] modularise profile.py, funclatency.py, and funcslower.py from bcc-tools
-- [ ] combine profile and funcslower into one script (don't actually need funclatency?)
+- [x] combine profile and funcslower into one script (don't actually need funclatency?)
 - [ ] add state that is reused between them
 - [ ] separate samples based on some high level decision
 - [ ] for any call taking longer than the 95th percentile, show me a flamegraph of all samples inside those calls
