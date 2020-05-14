@@ -37,9 +37,14 @@ def location_to_abs_address(dwarf, filename, line):
                             return cu, address.address
                     return cu, addresses[0].address
             prevstate = entry.state
+    print('error: not able to find location in binary file')
+    exit(1)
 
 def die_to_pubname(dwarf, die):
     pubnames = dwarf.get_pubnames()
+    if not pubnames:
+        print('error no pubnames in dwarf')
+        exit(1)
     entries = [n for (n, entry) in pubnames.items() if entry.die_ofs == die.offset]
     if len(entries) > 1:
         print('error multiple DIEs have the same offset')
@@ -103,27 +108,27 @@ def get_variable_location(dwarf, variable):
                         offset = die.attributes['DW_AT_location'].value
                         return offset
 
+def get_address(binary, filename, line):
+    dwarf = load_dwarf(binary)
+    name, address, rel_address = process_dwarf(dwarf, filename, line)
+    return name, rel_address, address
+
 if __name__ == '__main__':
     if len(sys.argv) < 3:
         print("error too few arguments")
         sys.exit(1)
-    bin_filename = sys.argv[1]
+    binary = sys.argv[1]
     location = sys.argv[2]
     if ':' not in location:
         print("error location specifier must be 'file:line'")
         sys.exit(1)
-
     filename = location.split(':')[0].encode()
     line = int(location.split(':')[1])
 
-    dwarf = load_dwarf(bin_filename)
+    _, address = location_to_abs_address(load_dwarf(binary), filename, line)
+    print('address', address)
 
-    variable_location = get_variable_location(dwarf, 'tick')
-
-    print('variable location', variable_location)
-
-    name, address, rel_address = process_dwarf(dwarf, filename, line)
+    name, rel_address, address = get_address(binary, filename, line)
 
     print('name', name)
-    print('abs address', address)
-    print('rel address', rel_address)
+    print('offset', rel_address)
