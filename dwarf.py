@@ -54,6 +54,31 @@ def die_to_pubname(dwarf, die):
 def cu_to_filename(cu):
     return cu.get_top_DIE().attributes['DW_AT_name'].value
 
+def die_check_address(dwarf, die, address):
+    if 'DW_AT_ranges' in die.attributes:
+        range = die.attributes['DW_AT_ranges'].value
+        ranges = dwarf.range_lists().get_range_list_at_offset(range)
+        for r in ranges:
+            if r.begin_offset <= address <= r.end_offset:
+                return die, r.begin_offset
+    elif 'DW_AT_low_pc' in die.attributes and 'DW_AT_high_pc' in die.attributes:
+        low_pc = die.attributes['DW_AT_low_pc'].value
+        high_pc_attr = die.attributes['DW_AT_high_pc']
+        high_pc_attr_class = elftools.dwarf.descriptions.describe_form_class(high_pc_attr.form)
+        if high_pc_attr_class == 'address':
+            high_pc = high_pc_attr.value
+        elif high_pc_attr_class == 'constant':
+            high_pc = low_pc + high_pc_attr.value
+        else:
+            print('error: invalid DW_AT_high_pc class:', high_pc_attr_class)
+        if low_pc <= address <= high_pc:
+            return die, low_pc
+            pass
+    elif 'DW_AT_low_pc' in die.attributes:
+        print('error subprogram with only DW_AT_low_pc is not handled yet')
+        sys.exit(1)
+    return None
+
 def address_to_subprogram_die(dwarf, address, cu_suggest=None):
     cu = cu_suggest
     if cu is None:
@@ -65,30 +90,16 @@ def address_to_subprogram_die(dwarf, address, cu_suggest=None):
         sys.exit(1)
 
     for die in cu.iter_DIEs():
+        if die.tag == 'DW_TAG_lexical_block':
+            tmp = die_check_address(dwarf, die, address)
+            if tmp is not None:
+                print(tmp)
+
+    for die in cu.iter_DIEs():
         if die.tag == 'DW_TAG_subprogram':
-            if 'DW_AT_ranges' in die.attributes:
-                range = die.attributes['DW_AT_ranges'].value
-                ranges = dwarf.debug_ranges_sec.index(range)
-                print('error DW_AT_ranges is not handled yet')
-                sys.exit(1)
-            elif 'DW_AT_low_pc' in die.attributes and 'DW_AT_high_pc' in die.attributes:
-                low_pc = die.attributes['DW_AT_low_pc'].value
-                high_pc_attr = die.attributes['DW_AT_high_pc']
-                high_pc_attr_class = elftools.dwarf.descriptions.describe_form_class(high_pc_attr.form)
-                if high_pc_attr_class == 'address':
-                    high_pc = high_pc_attr.value
-                elif high_pc_attr_class == 'constant':
-                    high_pc = low_pc + high_pc_attr.value
-                else:
-                    print('error: invalid DW_AT_high_pc class:', high_pc_attr_class)
-                    continue
-                if low_pc <= address <= high_pc:
-                    return die, low_pc
-            elif 'DW_AT_low_pc' in die.attributes:
-                print('error subprogram with only DW_AT_low_pc is not handled yet')
-                sys.exit(1)
-            else:
-                pass
+            tmp = die_check_address(dwarf, die, address)
+            if tmp is not None:
+                return tmp
     return None
 
 def process_dwarf(dwarf, filename, line):
