@@ -2,20 +2,23 @@
 
 ## motivation
 
-- profiling is good if your problem is visible when you average over time (e.g. perf and flamegraphs)
+- sampling is good if your problem is visible when you average over time (e.g. perf and flamegraphs)
 - tracing is good if you already have a strong hypothesis of what the problem is (e.g. all `recv` calls are slow, or this one `recv` call is slow)
     - static (compile time or manual instrumentation)
         - it's slow and painful to iterate
     - dynamic (run time) e.g. bpf based
         - doesn't have great tooling yet
         - doesn't make use of it's unique advantage: run time dynamism
+- no existing end user tool does either of these (AFAIK)
+    - dynamic tracing of user code
+    - combining sampling and tracing information
+- extra benefits
+    - live interaction between user, profiler and running application
+    - distributed, can collect from many machines to one
 
 ## existing tools
 
-- sampling (perf)
-    1. it's single machine
-    2. the live possibilities are limited
-- sampling visualisations
+- sampling (visualisation tools mostly based on perf)
     - [flamegraphs](github.com/brendangregg/flamegraph#flame-graphs-visualize-profiled-code)
         - no live capability
         - only one view
@@ -23,6 +26,34 @@
         - can highlight something that doesn't appear in the time average
         - but only in a specific way
     - [speedscope](github.com/jlfwong/speedscope#speedscope)
+    - [heat maps](http://www.brendangregg.com/heatmaps.html)
+- tracing
+    - [jaeger](https://www.jaegertracing.io/)
+        - code instrumentation
+        - manual, static
+    - [vampir](https://vampir.eu/)
+        - compiler based instrumentation
+        - automatic, static
+    - [tracy](https://github.com/wolfpld/tracy)
+        - code zone/scope instrumentation
+        - manual, static
+    - [dtrace](http://dtrace.org/blogs/)
+        - probe/action based
+        - some dynamic probes
+        - user code probes are manual, static
+    - [systemtap](https://sourceware.org/systemtap/)
+        - probe/script based
+        - some dynamic probes
+        - user code probes are manual, static
+- sampling and tracing
+    - [bpf](http://www.brendangregg.com/blog/2019-01-01/learn-ebpf-tracing.html)
+        - fully dynamic user code probes
+            - but quite awkward to implement
+            - need to process dwarf debug information yourself
+            - no end user facing tool offers this yet
+        - possible to combine tracing and sampling
+            - using perf events and user probes
+            - again, no end user facing tool offers this yet
 
 ## a new kind of interactive profiling
 
