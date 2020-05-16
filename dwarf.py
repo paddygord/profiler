@@ -90,24 +90,23 @@ def address_to_subprogram_die(dwarf, address, cu_suggest=None):
         sys.exit(1)
 
     for die in cu.iter_DIEs():
-        if die.tag == 'DW_TAG_lexical_block':
-            tmp = die_check_address(dwarf, die, address)
-            if tmp is not None:
-                print(tmp)
-
-    for die in cu.iter_DIEs():
         if die.tag == 'DW_TAG_subprogram':
             tmp = die_check_address(dwarf, die, address)
             if tmp is not None:
                 return tmp
+        elif die.tag == 'DW_TAG_lexical_block':
+            tmp = die_check_address(dwarf, die, address)
+            if tmp is not None:
+                #TODO do something with program structure
+                pass
     return None
 
-def process_dwarf(dwarf, filename, line):
-    cu, address = location_to_abs_address(dwarf, filename, line)
-    subprogram_die, subprogram_address = address_to_subprogram_die(dwarf, address, cu)
+def location_to_rel_address(dwarf, filename, line):
+    cu, abs_address = location_to_abs_address(dwarf, filename, line)
+    subprogram_die, subprogram_address = address_to_subprogram_die(dwarf, abs_address, cu)
     name = die_to_pubname(dwarf, subprogram_die)
-    rel_address = address - subprogram_address
-    return name, address, rel_address
+    rel_address = abs_address - subprogram_address
+    return name, rel_address, abs_address
 
 def get_variable_location(dwarf, variable):
     for cu in dwarf.iter_CUs():
@@ -118,11 +117,6 @@ def get_variable_location(dwarf, variable):
                     if var == b'tick':
                         offset = die.attributes['DW_AT_location'].value
                         return offset
-
-def get_address(binary, filename, line):
-    dwarf = load_dwarf(binary)
-    name, address, rel_address = process_dwarf(dwarf, filename, line)
-    return name, rel_address, address
 
 if __name__ == '__main__':
     if len(sys.argv) < 3:
@@ -136,10 +130,8 @@ if __name__ == '__main__':
     filename = location.split(':')[0].encode()
     line = int(location.split(':')[1])
 
-    _, address = location_to_abs_address(load_dwarf(binary), filename, line)
-    print('address', address)
-
-    name, rel_address, address = get_address(binary, filename, line)
+    name, rel_address, abs_address = location_to_rel_address(load_dwarf(binary), filename, line)
 
     print('name', name)
-    print('offset', rel_address)
+    print('rel address', rel_address)
+    print('abs address', hex(abs_address))
