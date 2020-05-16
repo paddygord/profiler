@@ -79,6 +79,7 @@ writing [bpf c](github.com/iovisor/bcc) is hard, so combine existing tools that 
 
 - [x] modularise profile.py, funclatency.py, and funcslower.py from bcc-tools
 - [x] combine profile and funcslower into one script (don't actually need funclatency?)
+- [x] integrate dwarf line number getter
 - [ ] add state that is reused between them
 - [ ] separate samples based on some high level decision
 - [ ] for any call taking longer than the 95th percentile, show me a flamegraph of all samples inside those calls
@@ -86,8 +87,7 @@ writing [bpf c](github.com/iovisor/bcc) is hard, so combine existing tools that 
 
 ## future
 
-- Maybe use dwarf debug info to allow inserting uprobes at any point in functions (rather than just entry/exit) and for accessing local variables (rather than just function arguments)
-  - [pyelftools](https://github.com/eliben/pyelftools)
-  - [poc using bcc and pyelftools](https://github.com/kroemeke/bcc_dwarf_poc)
+- Maybe use dwarf debug info to access local variables (rather than just function arguments)
 - Maybe use [plotly dash](https://dash.plotly.com/interactive-graphing) for a graphical frontend
 - Maybe use [kernel density estimation](https://scikit-learn.org/stable/modules/density.html#kernel-density-estimation) rather than histograms for visualisation and/or automatic discovery
+- Maybe come up with a gdb/[radare2](https://rada.re/n/radare2.html)/[cutter](https://cutter.re/)-like UI for interactive probing of program structure (functions, loops, conditions, basic blocks, lexical blocks, etc)

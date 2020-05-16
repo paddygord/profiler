@@ -119,16 +119,12 @@ def get_variable_location(dwarf, variable):
                         return offset
 
 if __name__ == '__main__':
-    if len(sys.argv) < 3:
-        print("error too few arguments")
+    if len(sys.argv) < 4:
+        print("usage:", sys.argv[0], "binary filename line_number")
         sys.exit(1)
     binary = sys.argv[1]
-    location = sys.argv[2]
-    if ':' not in location:
-        print("error location specifier must be 'file:line'")
-        sys.exit(1)
-    filename = location.split(':')[0].encode()
-    line = int(location.split(':')[1])
+    filename = sys.argv[2].encode()
+    line = int(sys.argv[3])
 
     name, rel_address, abs_address = location_to_rel_address(load_dwarf(binary), filename, line)
 
