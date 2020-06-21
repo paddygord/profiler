@@ -3,16 +3,16 @@ import bcc
 
 def run(binary, offset):
     bpf_text = """
-    struct entry {
+    struct trace {
         u64 tick;
         u64 time;
     };
-    BPF_HASH(stuff, u32, struct entry);
+    BPF_HASH(traces, u32, struct trace);
 
-    int trace(struct pt_regs *ctx) {
+    int on_trace(struct pt_regs *ctx) {
         u32 tid = bpf_get_current_pid_tgid();
 
-        struct entry* e = stuff.lookup(&tid);
+        struct trace* e = traces.lookup(&tid);
         u64 current_time = bpf_ktime_get_ns();
         if (e) {
             u64 dt = current_time - e->time;
@@ -23,28 +23,32 @@ def run(binary, offset):
             //won't there be concurrent inserts to the map
             //that will invalidate the pointer
         } else {
-            struct entry e;
+            struct trace e;
             e.tick = 0;
             e.time = current_time;
-            stuff.insert(&tid, &e);
+            traces.insert(&tid, &e);
         }
 
         return 0;
     }
 
-    int sample(struct pt_regs *ctx) {
+    int on_sample(struct pt_regs *ctx) {
         bpf_trace_printk("blep\\n");
         return 0;
     }
     """
 
     b = bcc.BPF(text=bpf_text)
-    b.attach_uprobe(name=binary, addr=offset, fn_name="trace")
+    b.attach_uprobe(
+        name=binary,
+        addr=offset,
+        fn_name="on_trace"
+    )
 
     b.attach_perf_event(
         ev_type=bcc.PerfType.SOFTWARE,
         ev_config=bcc.PerfSWConfig.CPU_CLOCK,
-        fn_name="sample",
+        fn_name="on_sample",
         sample_period=0,
         sample_freq=1,
         cpu=-1
