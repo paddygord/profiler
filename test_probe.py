@@ -15,7 +15,8 @@ def run(binary, offset):
         struct entry* e = stuff.lookup(&tid);
         u64 current_time = bpf_ktime_get_ns();
         if (e) {
-            bpf_trace_printk("thread %lu tick %llu time %lluns\\n", tid, e->tick, current_time - e->time);
+            u64 dt = current_time - e->time;
+            bpf_trace_printk("thread %lu tick %llu time %lluns\\n", tid, e->tick, dt);
             e->time = current_time;
             e->tick += 1;
             //TODO is it safe to use this pointer?
@@ -30,10 +31,24 @@ def run(binary, offset):
 
         return 0;
     }
+
+    int sample(struct pt_regs *ctx) {
+        bpf_trace_printk("blep\\n");
+        return 0;
+    }
     """
 
     b = bcc.BPF(text=bpf_text)
     b.attach_uprobe(name=binary, addr=offset, fn_name="trace")
+
+    b.attach_perf_event(
+        ev_type=bcc.PerfType.SOFTWARE,
+        ev_config=bcc.PerfSWConfig.CPU_CLOCK,
+        fn_name="sample",
+        sample_period=0,
+        sample_freq=1,
+        cpu=-1
+    )
 
     print('good')
     while True:
