@@ -15,7 +15,7 @@ def run(binary, offset):
         struct entry* e = stuff.lookup(&tid);
         u64 current_time = bpf_ktime_get_ns();
         if (e) {
-            bpf_trace_printk("tick %llu time %lluns\\n", e->tick, current_time - e->time);
+            bpf_trace_printk("thread %lu tick %llu time %lluns\\n", tid, e->tick, current_time - e->time);
             e->time = current_time;
             e->tick += 1;
             //TODO is it safe to use this pointer?
