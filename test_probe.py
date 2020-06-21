@@ -3,11 +3,24 @@ import bcc
 
 def run(binary, offset):
     bpf_text = """
+    #include <uapi/linux/bpf_perf_event.h>
+    #include <linux/sched.h> //TASK_COMM_LEN
+
     struct trace {
         u64 tick;
         u64 time;
     };
     BPF_HASH(traces, u32, struct trace);
+
+    struct sample {
+        u32 tid;
+        int user_stack_id;
+        char command[TASK_COMM_LEN];
+    };
+
+    BPF_HASH(samples_uncategorised, struct sample, u32);
+
+    BPF_STACK_TRACE(stack_traces, 4096);
 
     int on_trace(struct pt_regs *ctx) {
         u32 tid = bpf_get_current_pid_tgid();
@@ -32,7 +45,12 @@ def run(binary, offset):
         return 0;
     }
 
-    int on_sample(struct pt_regs *ctx) {
+    int on_sample(struct bpf_perf_event_data *ctx) {
+        struct sample s;
+        s.user_stack_id = stack_traces.get_stackid(&ctx->regs, BPF_F_USER_STACK);
+        s.tid = bpf_get_current_pid_tgid();
+        bpf_get_current_comm(&s.command, sizeof(s.command));
+        samples_uncategorised.increment(s);
         bpf_trace_printk("blep\\n");
         return 0;
     }
