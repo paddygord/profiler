@@ -3,26 +3,29 @@ import bcc
 
 def run(binary, offset):
     bpf_text = """
-    BPF_HASH(count, u32, u64);
-    BPF_HASH(prev_time, u32, u64);
+    struct entry {
+        u64 tick;
+        u64 time;
+    };
+    BPF_HASH(stuff, u32, struct entry);
+
     int trace(struct pt_regs *ctx) {
         u32 tid = bpf_get_current_pid_tgid();
 
-        u64* c = count.lookup(&tid);
-        if (c) {
-            bpf_trace_printk("step %d\\n", *c);
-        }
-        count.increment(tid);
-
-        u64* pt = prev_time.lookup(&tid);
+        struct entry* e = stuff.lookup(&tid);
         u64 current_time = bpf_ktime_get_ns();
-        if (pt) {
-            u64 t = *pt;
-            prev_time.update(&tid, &current_time);
-            u64 delta_time = current_time - t;
-            bpf_trace_printk("time delta %lluns\\n", delta_time);
+        if (e) {
+            bpf_trace_printk("tick %llu time %lluns\\n", e->tick, current_time - e->time);
+            e->time = current_time;
+            e->tick += 1;
+            //TODO is it safe to use this pointer?
+            //won't there be concurrent inserts to the map
+            //that will invalidate the pointer
         } else {
-            prev_time.insert(&tid, &current_time);
+            struct entry e;
+            e.tick = 0;
+            e.time = current_time;
+            stuff.insert(&tid, &e);
         }
 
         return 0;
