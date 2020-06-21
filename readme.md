@@ -64,16 +64,9 @@
 - it would even allow tracing an if-statement, other branch, or an arbitrary line of code, rather than just function entry/exit. this would be enabled by [dwarf debug info integration](#future)
 - rather than fixed time windows (e.g. run for 10 seconds then stop and report), reporting can be streaming (present data from last 10 seconds or an exponentially weighted moving average of all time)
 
-## approach
-
-writing [bpf c](github.com/iovisor/bcc) is hard, so combine existing tools that do bits of this problem
-- [profile](github.com/iovisor/bcc/blob/master/tools/profile.py): sample on-cpu stack traces at a regular interval
-- [funclatency](github.com/iovisor/bcc/blob/master/tools/funclatency.py): histogram duration of calls of a function
-- [funcslower](github.com/iovisor/bcc/blob/master/tools/funcslower.py): trace calls of a function that are slower than x ms
-
 ## dependencies
 
-- [bcc](https://github.com/iovisor/bcc/blob/master/INSTALL.md)
+- [bcc](https://github.com/iovisor/bcc/blob/master/INSTALL.md) [aur package](https://aur.archlinux.org/packages/python-bcc/)
 
 ## progress
 
