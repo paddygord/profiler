@@ -22,6 +22,13 @@ def run(binary, offset):
 
     BPF_STACK_TRACE(stack_traces, 4096);
 
+    struct signal {
+        u64 tick;
+        u64 dt;
+        u32 tid;
+    };
+    BPF_PERF_OUTPUT(signal_out);
+
     int on_trace(struct pt_regs *ctx) {
         u32 tid = bpf_get_current_pid_tgid();
 
@@ -29,7 +36,13 @@ def run(binary, offset):
         u64 current_time = bpf_ktime_get_ns();
         if (e) {
             u64 dt = current_time - e->time;
-            bpf_trace_printk("thread %lu tick %llu time %lluns\\n", tid, e->tick, dt);
+
+            struct signal s = {};
+            s.tick = e->tick;
+            s.dt = dt;
+            s.tid = tid;
+            signal_out.perf_submit(ctx, &s, sizeof(s));
+
             e->time = current_time;
             e->tick += 1;
             //TODO is it safe to use this pointer?
@@ -51,7 +64,6 @@ def run(binary, offset):
         s.tid = bpf_get_current_pid_tgid();
         bpf_get_current_comm(&s.command, sizeof(s.command));
         samples_uncategorised.increment(s);
-        bpf_trace_printk("blep\\n");
         return 0;
     }
     """
@@ -72,10 +84,10 @@ def run(binary, offset):
         cpu=-1
     )
 
-    print('good')
+    def on_signal(cpu, data, size):
+        event = b["signal_out"].event(data)
+        print('thread {} tick {} time {}'.format(event.tid, event.tick, event.dt))
+
+    b["signal_out"].open_perf_buffer(on_signal)
     while True:
-        try:
-            (task, pid, cpu, flags, ts, msg) = b.trace_fields()
-            print(msg.decode())
-        except ValueError:
-            pass
+        b.perf_buffer_poll()
