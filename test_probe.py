@@ -39,6 +39,6 @@ def run(binary, offset):
     while True:
         try:
             (task, pid, cpu, flags, ts, msg) = b.trace_fields()
-            print(msg)
+            print(msg.decode())
         except ValueError:
             pass
