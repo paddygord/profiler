@@ -85,5 +85,7 @@ def run(binary, offset):
 
     while True:
         sleep(1)
-        print(len(b["samples"].items()))
-        b["samples"].clear()
+        samples = b["samples"]
+        for k, v in samples.items():
+            print("tick {} tid {}".format(k.tick, k.tid))
+        samples.clear()
