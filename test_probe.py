@@ -1,69 +1,68 @@
 #!/usr/bin/env python
 import bcc
+from time import sleep
 
 def run(binary, offset):
     bpf_text = """
     #include <uapi/linux/bpf_perf_event.h>
     #include <linux/sched.h> //TASK_COMM_LEN
 
+    typedef u32 tid_t;
+    typedef u64 tick_t;
+    typedef u64 time_t;
+
     struct trace {
-        u64 tick;
-        u64 time;
+        tick_t tick;
+        time_t time;
     };
-    BPF_HASH(traces, u32, struct trace);
+    BPF_HASH(traces, tid_t, struct trace);
 
     struct sample {
-        u32 tid;
+        tick_t tick;
+        tid_t tid;
         int user_stack_id;
         char command[TASK_COMM_LEN];
     };
-
-    BPF_HASH(samples_uncategorised, struct sample, u32);
+    BPF_HASH(samples, struct sample, u32);
 
     BPF_STACK_TRACE(stack_traces, 4096);
 
-    struct signal {
-        u64 tick;
-        u64 dt;
-        u32 tid;
-    };
-    BPF_PERF_OUTPUT(signal_out);
-
     int on_trace(struct pt_regs *ctx) {
-        u32 tid = bpf_get_current_pid_tgid();
+        tid_t tid = bpf_get_current_pid_tgid();
 
-        struct trace* e = traces.lookup(&tid);
-        u64 current_time = bpf_ktime_get_ns();
-        if (e) {
-            u64 dt = current_time - e->time;
+        struct trace* t = traces.lookup(&tid);
+        time_t current_time = bpf_ktime_get_ns();
+        if (t) {
+            time_t dt = current_time - t->time;
 
-            struct signal s = {};
-            s.tick = e->tick;
-            s.dt = dt;
-            s.tid = tid;
-            signal_out.perf_submit(ctx, &s, sizeof(s));
-
-            e->time = current_time;
-            e->tick += 1;
+            t->time = current_time;
+            t->tick += 1;
             //TODO is it safe to use this pointer?
             //won't there be concurrent inserts to the map
             //that will invalidate the pointer
         } else {
-            struct trace e;
-            e.tick = 0;
-            e.time = current_time;
-            traces.insert(&tid, &e);
+            struct trace t;
+            t.tick = 0;
+            t.time = current_time;
+            traces.insert(&tid, &t);
         }
 
         return 0;
     }
 
     int on_sample(struct bpf_perf_event_data *ctx) {
-        struct sample s;
+        tid_t tid = bpf_get_current_pid_tgid();
+        struct trace* t = traces.lookup(&tid);
+        if (!t) {
+            //ignore sample, not from a tid with a previous trace
+            return 0;
+        }
+        struct sample s = {};
+        s.tick = t->tick;
         s.user_stack_id = stack_traces.get_stackid(&ctx->regs, BPF_F_USER_STACK);
-        s.tid = bpf_get_current_pid_tgid();
+        s.tid = tid;
         bpf_get_current_comm(&s.command, sizeof(s.command));
-        samples_uncategorised.increment(s);
+        samples.increment(s);
         return 0;
     }
     """
@@ -80,14 +79,11 @@ def run(binary, offset):
         ev_config=bcc.PerfSWConfig.CPU_CLOCK,
         fn_name="on_sample",
         sample_period=0,
-        sample_freq=1,
+        sample_freq=4096,
         cpu=-1
     )
 
-    def on_signal(cpu, data, size):
-        event = b["signal_out"].event(data)
-        print('thread {} tick {} time {}'.format(event.tid, event.tick, event.dt))
-
-    b["signal_out"].open_perf_buffer(on_signal)
     while True:
-        b.perf_buffer_poll()
+        sleep(1)
+        print(len(b["samples"].items()))
+        b["samples"].clear()
