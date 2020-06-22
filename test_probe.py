@@ -15,7 +15,13 @@ def run(binary, offset):
         tick_t tick;
         time_t time;
     };
-    BPF_HASH(traces, tid_t, struct trace);
+    BPF_HASH(current_traces, tid_t, struct trace);
+
+    struct output_trace {
+        tick_t tick;
+        tid_t tid;
+    };
+    BPF_HASH(output_traces, struct output_trace, time_t);
 
     struct sample {
         tick_t tick;
@@ -30,10 +36,15 @@ def run(binary, offset):
     int on_trace(struct pt_regs *ctx) {
         tid_t tid = bpf_get_current_pid_tgid();
 
-        struct trace* t = traces.lookup(&tid);
+        struct trace* t = current_traces.lookup(&tid);
         time_t current_time = bpf_ktime_get_ns();
         if (t) {
             time_t dt = current_time - t->time;
+
+            struct output_trace output = {};
+            output.tick = t->tick;
+            output.tid = tid;
+            output_traces.insert(&output, &dt);
 
             t->time = current_time;
             t->tick += 1;
@@ -44,7 +55,7 @@ def run(binary, offset):
             struct trace t;
             t.tick = 0;
             t.time = current_time;
-            traces.insert(&tid, &t);
+            current_traces.insert(&tid, &t);
         }
 
         return 0;
@@ -52,7 +63,7 @@ def run(binary, offset):
 
     int on_sample(struct bpf_perf_event_data *ctx) {
         tid_t tid = bpf_get_current_pid_tgid();
-        struct trace* t = traces.lookup(&tid);
+        struct trace* t = current_traces.lookup(&tid);
         if (!t) {
             //ignore sample, not from a tid with a previous trace
             return 0;
@@ -86,6 +97,10 @@ def run(binary, offset):
     while True:
         sleep(1)
         samples = b["samples"]
+        traces = b["output_traces"]
         for k, v in samples.items():
             print("tick {} tid {}".format(k.tick, k.tid))
+        for k, v in sorted(traces.items(), key=lambda kv: kv[0].tick):
+            print("tick {} tid {} time {}".format(k.tick, k.tid, v.value))
         samples.clear()
+        traces.clear()
