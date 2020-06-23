@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 import bcc
 from time import sleep
+from stacks import print_stack
 
 def run(binary, offset):
     bpf_text = """
@@ -98,9 +99,15 @@ def run(binary, offset):
         sleep(1)
         samples = b["samples"]
         traces = b["output_traces"]
+        stack_traces = b["stack_traces"]
         for k, v in samples.items():
             print("tick {} tid {}".format(k.tick, k.tid))
+            try:
+                print_stack(b, k, v, stack_traces)
+            except KeyError:
+                pass
         for k, v in sorted(traces.items(), key=lambda kv: kv[0].tick):
-            print("tick {} tid {} time {}".format(k.tick, k.tid, v.value))
+            #print("tick {} tid {} time {}".format(k.tick, k.tid, v.value))
+            pass
         samples.clear()
         traces.clear()
