@@ -1,9 +1,8 @@
 #!/usr/bin/env python
 import bcc
-from time import sleep
 from stacks import print_stack
 
-def run(binary, offset):
+def compile():
     bpf_text = """
     #include <uapi/linux/bpf_perf_event.h>
     #include <linux/sched.h> //TASK_COMM_LEN
@@ -80,6 +79,9 @@ def run(binary, offset):
     """
 
     b = bcc.BPF(text=bpf_text)
+    return b
+
+def attach(b, binary, offset):
     b.attach_uprobe(
         name=binary,
         addr=offset,
@@ -95,19 +97,18 @@ def run(binary, offset):
         cpu=-1
     )
 
-    while True:
-        sleep(1)
-        samples = b["samples"]
-        traces = b["output_traces"]
-        stack_traces = b["stack_traces"]
-        for k, v in samples.items():
-            print("tick {} tid {}".format(k.tick, k.tid))
-            try:
-                print_stack(b, k, v, stack_traces)
-            except KeyError:
-                pass
-        for k, v in sorted(traces.items(), key=lambda kv: kv[0].tick):
-            #print("tick {} tid {} time {}".format(k.tick, k.tid, v.value))
+def report(b):
+    samples = b["samples"]
+    traces = b["output_traces"]
+    stack_traces = b["stack_traces"]
+    for k, v in samples.items():
+        print("tick {} tid {}".format(k.tick, k.tid))
+        try:
+            print_stack(b, k, v, stack_traces)
+        except KeyError:
             pass
-        samples.clear()
-        traces.clear()
+    for k, v in sorted(traces.items(), key=lambda kv: kv[0].tick):
+        #print("tick {} tid {} time {}".format(k.tick, k.tid, v.value))
+        pass
+    samples.clear()
+    traces.clear()

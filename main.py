@@ -2,7 +2,8 @@
 
 import sys
 import dwarf
-import test_probe
+import probe
+from time import sleep
 
 if len(sys.argv) < 4:
     print("usage:", sys.argv[0], "binary filename line_number")
@@ -11,8 +12,13 @@ binary = sys.argv[1]
 filename = sys.argv[2].encode()
 line = int(sys.argv[3])
 
-print('getting address from line number')
+print('reading dwarf')
 _, address = dwarf.location_to_abs_address(dwarf.load_dwarf(binary), filename, line)
-print('address', hex(address))
-print('attaching probe')
-test_probe.run(binary, address)
+print('compiling bpf')
+b = probe.compile()
+print('attaching probes')
+probe.attach(b, binary, address)
+print('running')
+while True:
+    probe.report(b)
+    sleep(1)
